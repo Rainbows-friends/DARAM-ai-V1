@@ -1,15 +1,18 @@
 import cv2
 import numpy as np
-from openvino.runtime import Core
-from deepface import DeepFace
+from keras_preprocessing.image import ImageDataGenerator
 import pickle
+import os
+from deepface import DeepFace
 
 class FaceRecog:
     def __init__(self):
         self.embeddings_file = 'face_embeddings.pkl'
+        self.known_faces_dir = r'Y:\Faceon_Project\known_faces'
         self.load_known_faces()
-        self.setup_model()
+        self.create_embeddings()  # 등록된 얼굴 데이터셋 임베딩 생성 및 저장
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        self.datagen = ImageDataGenerator(rotation_range=10, width_shift_range=0.1, height_shift_range=0.1, shear_range=0.15, zoom_range=0.1, horizontal_flip=True, fill_mode="nearest")
 
     def load_known_faces(self):
         try:
@@ -21,35 +24,49 @@ class FaceRecog:
             self.known_face_encodings = []
             self.known_face_names = []
 
-    def setup_model(self):
+    def create_embeddings(self):
         try:
-            self.core = Core()
-            self.model = self.core.read_model(model="Y:\\Faceon_Project\\dataset\\model.xml")
-            config = {
-                "NUM_STREAMS": "2",
-                "INFERENCE_PRECISION_HINT": "f32",
-                "PERFORMANCE_HINT": "THROUGHPUT",
-            }
-            self.compiled_model = self.core.compile_model(self.model, device_name="GPU", config=config)
-            self.input_layer = self.compiled_model.input(0).any_name
-            self.output_layer = self.compiled_model.output(0).any_name
-            self.input_shape = self.model.input(0).partial_shape
-            self.input_height, self.input_width = int(self.input_shape[1].get_length()), int(self.input_shape[2].get_length())
+            new_face_encodings = []
+            new_face_names = []
+            for filename in os.listdir(self.known_faces_dir):
+                if filename.endswith(".jpg") or filename.endswith(".png"):
+                    img_path = os.path.join(self.known_faces_dir, filename)
+                    face_encoding = DeepFace.represent(img_path=img_path, model_name="Facenet")[0]["embedding"]
+                    new_face_encodings.append(face_encoding)
+                    new_face_names.append(os.path.splitext(filename)[0])
+            with open(self.embeddings_file, 'wb') as f:
+                pickle.dump((new_face_encodings, new_face_names), f)
+            print(f"Created embeddings for {len(new_face_encodings)} faces.")
+            self.known_face_encodings, self.known_face_names = new_face_encodings, new_face_names
         except Exception as e:
-            print(f"Error setting up model: {e}")
+            print(f"Error creating embeddings: {e}")
 
     def preprocess_input(self, frame):
-        image = cv2.resize(frame, (self.input_width, self.input_height))
+        image = cv2.resize(frame, (224, 224))  # assuming input size is 224x224
         image = image.astype(np.float32)
         image = image / 255.0
-        image = image.reshape((1, self.input_height, self.input_width, 3))
+        image = np.expand_dims(image, axis=0)
         return image
+
+    def augment_image(self, image):
+        img_array = np.expand_dims(image, axis=0)
+        augmented_images = [image]
+        for batch in self.datagen.flow(img_array, batch_size=1):
+            augmented_images.append(batch[0].astype(np.uint8))
+            if len(augmented_images) >= 5:  # Generate 5 augmented images
+                break
+        return augmented_images
 
     def process_face(self, face, frame):
         try:
             x, y, w, h = face["facial_area"]["x"], face["facial_area"]["y"], face["facial_area"]["w"], face["facial_area"]["h"]
             face_img = frame[y:y+h, x:x+w]
-            face_embedding = np.array(DeepFace.represent(face_img, model_name="Facenet")[0]["embedding"])
+            augmented_images = self.augment_image(face_img)
+            face_embeddings = []
+            for img in augmented_images:
+                face_embedding = np.array(DeepFace.represent(img, model_name="Facenet")[0]["embedding"])
+                face_embeddings.append(face_embedding)
+            face_embedding = np.mean(face_embeddings, axis=0)
             name = "Unknown"
             if self.known_face_encodings:
                 known_encodings = np.array(self.known_face_encodings)
@@ -90,7 +107,6 @@ class FaceRecog:
         cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    import os
     os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
     fr = FaceRecog()
     fr.run()

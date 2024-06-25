@@ -1,0 +1,52 @@
+import tensorflow as tf
+from keras import Model
+from keras import Input
+from keras.src.utils.module_utils import tensorflow
+from tensorflow.keras.layers import Convolution2D, ZeroPadding2D, MaxPooling2D, Flatten, Dense, Dropout, Activation
+
+def vgg_face(weights_path=None):
+    img = Input(shape=(224, 224, 3))
+    x = ZeroPadding2D((1, 1))(img)
+    x = Convolution2D(64, (3, 3), activation='relu', name='conv1_1')(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(64, (3, 3), activation='relu', name='conv1_2')(x)
+    x = MaxPooling2D((2, 2), strides=(2, 2))(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(128, (3, 3), activation='relu', name='conv2_1')(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(128, (3, 3), activation='relu', name='conv2_2')(x)
+    x = MaxPooling2D((2, 2), strides=(2, 2))(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(256, (3, 3), activation='relu', name='conv3_1')(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(256, (3, 3), activation='relu', name='conv3_2')(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(256, (3, 3), activation='relu', name='conv3_3')(x)
+    x = MaxPooling2D((2, 2), strides=(2, 2))(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(512, (3, 3), activation='relu', name='conv4_1')(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(512, (3, 3), activation='relu', name='conv4_2')(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(512, (3, 3), activation='relu', name='conv4_3')(x)
+    x = MaxPooling2D((2, 2), strides=(2, 2))(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(512, (3, 3), activation='relu', name='conv5_1')(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(512, (3, 3), activation='relu', name='conv5_2')(x)
+    x = ZeroPadding2D((1, 1))(x)
+    x = Convolution2D(512, (3, 3), activation='relu', name='conv5_3')(x)
+    x = MaxPooling2D((2, 2), strides=(2, 2))(x)
+    x = Convolution2D(4096, (7, 7), activation='relu', name='fc6')(x)
+    x = Dropout(0.5)(x)
+    x = Convolution2D(4096, (1, 1), activation='relu', name='fc7')(x)
+    x = Dropout(0.5)(x)
+    x = Convolution2D(2622, (1, 1), name='fc8')(x)
+    x = Flatten()(x)
+    x = Activation('softmax')(x)
+    model = Model(img, x)
+    if weights_path:
+        model.load_weights(weights_path)
+    return model
+model = vgg_face('C:\\Users\\USER\\Downloads\\vgg_face_weights.h5')
+model.save('C:\\Users\\USER\\Downloads\\vggface_model.h5')

@@ -10,7 +10,7 @@ class FaceRecog:
         self.embeddings_file = 'face_embeddings.pkl'
         self.known_faces_dir = r'Y:\Faceon_Project\known_faces'
         self.load_known_faces()
-        self.create_embeddings()  # 등록된 얼굴 데이터셋 임베딩 생성 및 저장
+        self.update_embeddings()  # 등록된 얼굴 데이터셋 임베딩 생성 및 저장
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         self.datagen = ImageDataGenerator(rotation_range=10, width_shift_range=0.1, height_shift_range=0.1, shear_range=0.15, zoom_range=0.1, horizontal_flip=True, fill_mode="nearest")
 
@@ -24,22 +24,36 @@ class FaceRecog:
             self.known_face_encodings = []
             self.known_face_names = []
 
-    def create_embeddings(self):
+    def update_embeddings(self):
         try:
             new_face_encodings = []
             new_face_names = []
             for filename in os.listdir(self.known_faces_dir):
                 if filename.endswith(".jpg") or filename.endswith(".png"):
                     img_path = os.path.join(self.known_faces_dir, filename)
-                    face_encoding = DeepFace.represent(img_path=img_path, model_name="Facenet")[0]["embedding"]
-                    new_face_encodings.append(face_encoding)
-                    new_face_names.append(os.path.splitext(filename)[0])
+                    face = DeepFace.extract_faces(img_path=img_path, enforce_detection=False, align=False)
+                    if len(face) > 0:
+                        face_encoding = np.array(DeepFace.represent(face[0]["face"], model_name="Facenet")[0]["embedding"])
+                        new_face_encodings.append(face_encoding)
+                        new_face_names.append(os.path.splitext(filename)[0])
+
+            combined_encodings = self.known_face_encodings.copy()
+            combined_names = self.known_face_names.copy()
+
+            for new_encoding, new_name in zip(new_face_encodings, new_face_names):
+                if new_name in combined_names:
+                    idx = combined_names.index(new_name)
+                    combined_encodings[idx] = np.mean([combined_encodings[idx], new_encoding], axis=0)
+                else:
+                    combined_encodings.append(new_encoding)
+                    combined_names.append(new_name)
+
             with open(self.embeddings_file, 'wb') as f:
-                pickle.dump((new_face_encodings, new_face_names), f)
-            print(f"Created embeddings for {len(new_face_encodings)} faces.")
-            self.known_face_encodings, self.known_face_names = new_face_encodings, new_face_names
+                pickle.dump((combined_encodings, combined_names), f)
+            print(f"Updated embeddings for {len(new_face_encodings)} faces. Total faces: {len(combined_encodings)}.")
+            self.known_face_encodings, self.known_face_names = combined_encodings, combined_names
         except Exception as e:
-            print(f"Error creating embeddings: {e}")
+            print(f"Error updating embeddings: {e}")
 
     def preprocess_input(self, frame):
         image = cv2.resize(frame, (224, 224))  # assuming input size is 224x224
@@ -62,6 +76,7 @@ class FaceRecog:
             x, y, w, h = face["facial_area"]["x"], face["facial_area"]["y"], face["facial_area"]["w"], face["facial_area"]["h"]
             face_img = frame[y:y+h, x:x+w]
             augmented_images = self.augment_image(face_img)
+            print(f"Augmented {len(augmented_images)} images for face at ({x}, {y}, {w}, {h})")  # 증강 시 메시지 출력
             face_embeddings = []
             for img in augmented_images:
                 face_embedding = np.array(DeepFace.represent(img, model_name="Facenet")[0]["embedding"])
@@ -101,8 +116,12 @@ class FaceRecog:
             frame, jpg_bytes = self.get_frame()
             if frame is not None:
                 cv2.imshow("Video", frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            key = cv2.waitKey(1)
+            if key & 0xFF == ord('q'):
                 break
+            elif key & 0xFF == ord('a'):  # 'a' 키를 누르면 증강 수행
+                self.update_embeddings()
+                print("Augmentation performed.")
         self.video_capture.release()
         cv2.destroyAllWindows()
 

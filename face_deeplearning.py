@@ -1,16 +1,15 @@
-import cv2
-import numpy as np
-from keras_preprocessing.image import ImageDataGenerator
-import pickle
 import os
+import pickle
 from deepface import DeepFace
+from keras_preprocessing.image import ImageDataGenerator
+import numpy as np
+import cv2
 
-class FaceRecog:
-    def __init__(self):
-        self.embeddings_file = 'face_embeddings.pkl'
-        self.known_faces_dir = r'Y:\Faceon_Project\known_faces'
+class FaceAugmentorRecognizer:
+    def __init__(self, known_faces_dir='known_faces', embeddings_file='face_embeddings.pkl'):
+        self.known_faces_dir = known_faces_dir
+        self.embeddings_file = embeddings_file
         self.load_known_faces()
-        self.update_embeddings()  # 등록된 얼굴 데이터셋 임베딩 생성 및 저장
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         self.datagen = ImageDataGenerator(rotation_range=10, width_shift_range=0.1, height_shift_range=0.1, shear_range=0.15, zoom_range=0.1, horizontal_flip=True, fill_mode="nearest")
 
@@ -24,6 +23,15 @@ class FaceRecog:
             self.known_face_encodings = []
             self.known_face_names = []
 
+    def augment_image(self, image):
+        img_array = np.expand_dims(image, axis=0)
+        augmented_images = [image]
+        for batch in self.datagen.flow(img_array, batch_size=1):
+            augmented_images.append(batch[0].astype(np.uint8))
+            if len(augmented_images) >= 5:  # Generate 5 augmented images
+                break
+        return augmented_images
+
     def update_embeddings(self):
         try:
             new_face_encodings = []
@@ -33,25 +41,23 @@ class FaceRecog:
                     img_path = os.path.join(self.known_faces_dir, filename)
                     face = DeepFace.extract_faces(img_path=img_path, enforce_detection=False, align=False)
                     if len(face) > 0:
-                        face_encoding = np.array(DeepFace.represent(face[0]["face"], model_name="Facenet")[0]["embedding"])
-                        new_face_encodings.append(face_encoding)
+                        face_img = face[0]["face"]
+                        augmented_images = self.augment_image(face_img)
+                        face_embeddings = []
+                        for img in augmented_images:
+                            face_embedding = np.array(DeepFace.represent(img, model_name="Facenet")[0]["embedding"])
+                            face_embeddings.append(face_embedding)
+                        face_embedding = np.mean(face_embeddings, axis=0)
+                        new_face_encodings.append(face_embedding)
                         new_face_names.append(os.path.splitext(filename)[0])
-
-            combined_encodings = self.known_face_encodings.copy()
-            combined_names = self.known_face_names.copy()
-
-            for new_encoding, new_name in zip(new_face_encodings, new_face_names):
-                if new_name in combined_names:
-                    idx = combined_names.index(new_name)
-                    combined_encodings[idx] = np.mean([combined_encodings[idx], new_encoding], axis=0)
-                else:
-                    combined_encodings.append(new_encoding)
-                    combined_names.append(new_name)
-
+                        print(f"Processed {filename}, detected face and created embeddings.")
+                    else:
+                        print(f"No face detected in {img_path}. Skipping this image.")
+            self.known_face_encodings.extend(new_face_encodings)
+            self.known_face_names.extend(new_face_names)
             with open(self.embeddings_file, 'wb') as f:
-                pickle.dump((combined_encodings, combined_names), f)
-            print(f"Updated embeddings for {len(new_face_encodings)} faces. Total faces: {len(combined_encodings)}.")
-            self.known_face_encodings, self.known_face_names = combined_encodings, combined_names
+                pickle.dump((self.known_face_encodings, self.known_face_names), f)
+            print(f"Updated embeddings for {len(new_face_encodings)} faces. Total faces: {len(self.known_face_encodings)}.")
         except Exception as e:
             print(f"Error updating embeddings: {e}")
 
@@ -61,15 +67,6 @@ class FaceRecog:
         image = image / 255.0
         image = np.expand_dims(image, axis=0)
         return image
-
-    def augment_image(self, image):
-        img_array = np.expand_dims(image, axis=0)
-        augmented_images = [image]
-        for batch in self.datagen.flow(img_array, batch_size=1):
-            augmented_images.append(batch[0].astype(np.uint8))
-            if len(augmented_images) >= 5:  # Generate 5 augmented images
-                break
-        return augmented_images
 
     def process_face(self, face, frame):
         try:
@@ -88,7 +85,7 @@ class FaceRecog:
                 distances = np.linalg.norm(known_encodings - face_embedding, axis=1)
                 best_match_index = np.argmin(distances)
                 print(f"Best match distance: {distances[best_match_index]}")  # 디버그 정보 출력
-                if distances[best_match_index] < 0.6:  # Threshold for recognizing as known face
+                if distances[best_match_index] < 3.6:  # Threshold for recognizing as known face
                     name = self.known_face_names[best_match_index]
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
             cv2.putText(frame, name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
@@ -127,5 +124,5 @@ class FaceRecog:
 
 if __name__ == "__main__":
     os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
-    fr = FaceRecog()
+    fr = FaceAugmentorRecognizer()
     fr.run()

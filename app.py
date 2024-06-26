@@ -20,6 +20,10 @@ def gen():
 def video_feed():
     return Response(gen(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+def run_flask():
+    app.run(host='0.0.0.0', debug=False)
+
 if __name__ == '__main__':
-    threading.Thread(target=fr.run, daemon=True).start()
-    app.run(host='0.0.0.0', debug=True)
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    fr.run()

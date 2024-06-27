@@ -2,13 +2,12 @@ import os
 import pickle
 from deepface import DeepFace
 
-def create_face_embeddings(directory='known_faces', output_file='face_embeddings.pkl'):
+def create_face_embeddings(directory='known_faces', output_file='initial_face_embeddings.pkl'):
     known_face_encodings = []
     known_face_names = []
-
     for person_name in os.listdir(directory):
         person_dir = os.path.join(directory, person_name)
-        if os.path.isdir(person_dir):
+        if os.path.isdir(person_dir) and person_name != "Other":
             for image_name in os.listdir(person_dir):
                 image_path = os.path.join(person_dir, image_name)
                 try:

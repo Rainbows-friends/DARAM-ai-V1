@@ -7,8 +7,8 @@ import joblib
 
 class FaceRecog:
     def __init__(self):
-        self.initial_embeddings_file = 'Y:\\Faceon_Project\\initial_face_embeddings.pkl'
-        self.augmented_embeddings_file = 'Y:\\Faceon_Project\\augmented_face_embeddings.pkl'
+        self.initial_embeddings_file = r'C:\Faceon_Project\DTFO_Taeeun\initial_face_embeddings.pkl'
+        self.augmented_embeddings_file = r'C:\Faceon_Project\DTFO_Taeeun\augmented_face_embeddings.pkl'
         self.load_known_faces()
         self.load_face_detector()
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
@@ -29,7 +29,7 @@ class FaceRecog:
             self.known_face_names = []
 
     def load_face_detector(self):
-        self.face_detector = joblib.load('Y:\\Faceon_Project\\face_detector.pkl')
+        self.face_detector = joblib.load(r'C:\Faceon_Project\DTFO_Taeeun\face_detector.pkl')
 
     def detect_faces(self, frame):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -44,7 +44,7 @@ class FaceRecog:
             name = "Unknown"
             if self.known_face_encodings:
                 known_encodings = np.array(self.known_face_encodings)
-                distances = np.linalg.norm(known_encodings - face_embedding, axis=1)
+                distances = np.linalg.norm(known_encodings - face_embedding, axis1=1)
                 best_match_index = np.argmin(distances)
                 print(f"Best match distance: {distances[best_match_index]}")  # 디버그 정보 출력
                 if distances[best_match_index] < 0.6:  # Threshold for recognizing as known face

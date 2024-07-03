@@ -1,18 +1,21 @@
+import os
 import cv2
 import numpy as np
 from keras_preprocessing.image import ImageDataGenerator
 import pickle
-import os
 from deepface import DeepFace
 
 class FaceRecog:
     def __init__(self):
-        self.initial_embeddings_file = 'initial_face_embeddings.pkl'
-        self.augmented_embeddings_file = 'augmented_face_embeddings.pkl'
+        self.initial_embeddings_file = 'C:\\Faceon_Project\\DTFO_Taeeun\\initial_face_embeddings.pkl'
+        self.augmented_embeddings_file = 'C:\\Faceon_Project\\DTFO_Taeeun\\augmented_face_embeddings.pkl'
+        self.known_faces_dir = 'C:\\Faceon_Project\\DTFO_Taeeun\\known_faces'
+        self.other_faces_dir = 'C:\\Faceon_Project\\DTFO_Taeeun\\Other'
         self.load_known_faces()
         self.update_embeddings()
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         self.datagen = ImageDataGenerator(rotation_range=10, width_shift_range=0.1, height_shift_range=0.1, shear_range=0.15, zoom_range=0.1, horizontal_flip=True, fill_mode="nearest")
+        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
     def load_known_faces(self):
         try:
@@ -67,13 +70,6 @@ class FaceRecog:
         except Exception as e:
             print(f"Error updating embeddings: {e}")
 
-    def preprocess_input(self, frame):
-        image = cv2.resize(frame, (224, 224))  # assuming input size is 224x224
-        image = image.astype(np.float32)
-        image = image / 255.0
-        image = np.expand_dims(image, axis=0)
-        return image
-
     def augment_image(self, image):
         img_array = np.expand_dims(image, axis=0)
         augmented_images = [image]
@@ -85,7 +81,7 @@ class FaceRecog:
 
     def process_face(self, face, frame):
         try:
-            x, y, w, h = face["facial_area"]["x"], face["facial_area"]["y"], face["facial_area"]["w"], face["facial_area"]["h"]
+            x, y, w, h = face
             face_img = frame[y:y+h, x:x+w]
             augmented_images = self.augment_image(face_img)
             print(f"Augmented {len(augmented_images)} images for face at ({x}, {y}, {w}, {h})")  # 증강 시 메시지 출력
@@ -95,15 +91,17 @@ class FaceRecog:
                 face_embeddings.append(face_embedding)
             face_embedding = np.mean(face_embeddings, axis=0)
             name = "Unknown"
+            color = (0, 0, 255)  # Red for unknown
             if self.known_face_encodings:
                 known_encodings = np.array(self.known_face_encodings)
                 distances = np.linalg.norm(known_encodings - face_embedding, axis=1)
                 best_match_index = np.argmin(distances)
                 print(f"Best match distance: {distances[best_match_index]}")  # 디버그 정보 출력
-                if distances[best_match_index] < 0.6:  # Threshold for recognizing as known face
+                if distances[best_match_index] < 4.6:  # Threshold for recognizing as known face
                     name = self.known_face_names[best_match_index]
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            cv2.putText(frame, name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    color = (255, 0, 0)  # Blue for known
+            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+            cv2.putText(frame, name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         except Exception as e:
             print(f"Error processing face: {e}")
 
@@ -114,7 +112,7 @@ class FaceRecog:
             return None, None
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         try:
-            faces = DeepFace.extract_faces(frame, detector_backend='opencv', enforce_detection=False, align=False)
+            faces = self.face_cascade.detectMultiScale(frame_rgb, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
             for face in faces:
                 self.process_face(face, frame)
         except Exception as e:

@@ -7,8 +7,7 @@ import joblib
 
 class FaceRecog:
     def __init__(self):
-        self.initial_embeddings_file = r'C:\Faceon_Project\DTFO_Taeeun\initial_face_embeddings.pkl'
-        self.augmented_embeddings_file = r'C:\Faceon_Project\DTFO_Taeeun\augmented_face_embeddings.pkl'
+        self.initial_embeddings_file = 'C:\\Faceon_Project\\DTFO_Taeeun\\initial_face_embeddings.pkl'
         self.load_known_faces()
         self.load_face_detector()
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
@@ -17,11 +16,7 @@ class FaceRecog:
     def load_known_faces(self):
         try:
             with open(self.initial_embeddings_file, 'rb') as f:
-                initial_face_encodings, initial_face_names = pickle.load(f)
-            with open(self.augmented_embeddings_file, 'rb') as f:
-                augmented_face_encodings, augmented_face_names = pickle.load(f)
-            self.known_face_encodings = initial_face_encodings + augmented_face_encodings
-            self.known_face_names = initial_face_names + augmented_face_names
+                self.known_face_encodings, self.known_face_names = pickle.load(f)
             print(f"Loaded {len(self.known_face_encodings)} known faces.")
         except Exception as e:
             print(f"Error loading known faces: {e}")
@@ -29,7 +24,7 @@ class FaceRecog:
             self.known_face_names = []
 
     def load_face_detector(self):
-        self.face_detector = joblib.load(r'C:\Faceon_Project\DTFO_Taeeun\face_detector.pkl')
+        self.face_detector = joblib.load('C:\\Faceon_Project\\DTFO_Taeeun\\face_detector.pkl')
 
     def detect_faces(self, frame):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -42,17 +37,16 @@ class FaceRecog:
             face_img = frame[y:y+h, x:x+w]
             face_embedding = np.array(DeepFace.represent(face_img, model_name="Facenet", enforce_detection=False)[0]["embedding"])
             name = "Unknown"
-            box_color = (0, 255, 100)
+            color = (0, 0, 255)
             if self.known_face_encodings:
                 known_encodings = np.array(self.known_face_encodings)
                 distances = np.linalg.norm(known_encodings - face_embedding, axis=1)
                 best_match_index = np.argmin(distances)
-                print(f"Best match distance: {distances[best_match_index]}")
-                if distances[best_match_index] < 4.6:
+                if distances[best_match_index] < 5.6:
                     name = self.known_face_names[best_match_index]
-                    box_color = (50, 0, 195)
-            cv2.rectangle(frame, (x, y), (x + w, y + h), box_color, 2)
-            cv2.putText(frame, name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2)
+                    color = (255, 100, 0)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+            cv2.putText(frame, name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         except Exception as e:
             print(f"Error processing face: {e}")
 
